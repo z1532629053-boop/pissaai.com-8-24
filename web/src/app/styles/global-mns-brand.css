@@ -1,0 +1,529 @@
+/*
+ * MNS 品牌样式
+ * 从 MNS 项目移植的登录界面与后台管理视觉层。
+ * 只承载视觉类名，不含业务逻辑。
+ */
+
+/* ---------- MNS 灵动岛模式切换 ---------- */
+.mns-workspace-island {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  z-index: 60;
+  isolation: isolate;
+  width: min(760px, calc(100% - 32px));
+  min-height: 60px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 24px;
+  transition: width .32s cubic-bezier(.22, 1, .36, 1);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(244, 249, 255, 0.72) 46%, rgba(255, 255, 255, 0.82)), rgba(255, 255, 255, 0.72);
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.14), 0 10px 28px rgba(14, 165, 233, 0.1), 0 10px 28px rgba(217, 70, 239, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(22px) saturate(150%);
+}
+.mns-workspace-island-panel-open { left: calc(50% - 176px); }
+.mns-workspace-island-no-activity { width: min(420px, calc(100% - 32px)); }
+.mns-workspace-island-aurora,
+.mns-workspace-island-ring,
+.mns-workspace-island-sheen,
+.mns-workspace-island-glint { position: absolute; pointer-events: none; border-radius: inherit; }
+.mns-workspace-island-aurora { inset: -20px; z-index: -3; background: radial-gradient(circle at 12% 42%, rgba(34, 211, 238, 0.22), transparent 28%), radial-gradient(circle at 42% 0%, rgba(168, 85, 247, 0.18), transparent 30%), radial-gradient(circle at 78% 58%, rgba(16, 185, 129, 0.14), transparent 28%); filter: blur(18px); opacity: .6; }
+.mns-workspace-island-ring { inset: -2px; z-index: -2; padding: 2px; background: linear-gradient(100deg, rgba(34, 211, 238, .42), rgba(255,255,255,.86) 18%, rgba(168,85,247,.42) 34%, rgba(255,255,255,.78) 50%, rgba(244,114,182,.34) 66%, rgba(34,211,238,.42)); background-size: 320% 320%; opacity: .5; filter: blur(.2px); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; animation: mns-island-ring-flow 8s linear infinite, mns-island-ring-breathe 4.6s ease-in-out infinite; }
+.mns-workspace-island-sheen { inset: 0; z-index: -1; background: radial-gradient(circle at 18% 0%, rgba(255,255,255,.82), transparent 31%), radial-gradient(circle at 73% 15%, rgba(34,211,238,.08), transparent 30%), linear-gradient(180deg, rgba(255,255,255,.58), rgba(248,250,252,.16) 48%, rgba(226,232,240,.24)); }
+.mns-workspace-island-glint { inset-inline: 28px; top: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.9), transparent); opacity: .75; }
+.mns-workspace-island-inner { position: relative; z-index: 1; display: flex; min-height: 60px; align-items: stretch; gap: 3px; padding: 5px; }
+.mns-workspace-island-activity { display: flex; min-width: 250px; flex: 1; align-items: center; gap: 8px; border: 0; border-left: 1px solid rgba(148, 163, 184, .2); border-radius: 16px; background: rgba(248, 250, 252, .72); padding: 7px 10px; color: #111820; text-align: left; cursor: pointer; }
+.mns-workspace-island-activity-enter { animation: mns-island-activity-enter .32s cubic-bezier(.22, 1, .36, 1) both; }
+.mns-workspace-island-activity-icon { display: grid; width: 32px; height: 32px; flex-shrink: 0; place-items: center; border-radius: 999px; }
+.mns-workspace-island-activity-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
+.mns-workspace-island-activity-copy strong { overflow: hidden; color: #111820; font-size: 13px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.mns-workspace-island-activity-copy small { overflow: hidden; color: #6b7785; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.mns-workspace-island-status { flex-shrink: 0; border: 1px solid transparent; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.mns-workspace-island-status-running { border-color: #bae6fd; background: #e0f2fe; color: #0369a1; }
+.mns-workspace-island-status-completed { border-color: #bbf7d0; background: #dcfce7; color: #047857; }
+.mns-workspace-island-status-failed { border-color: #fecdd3; background: #ffe4e6; color: #be123c; }
+.mns-workspace-island-status-paused,
+.mns-workspace-island-status-partial { border-color: #fde68a; background: #fef3c7; color: #a16207; }
+.mns-workspace-island-status-idle { border-color: #e2e8f0; background: #f8fafc; color: #64748b; }
+.mns-workspace-island-expanded { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(148, 163, 184, .2); padding: 8px 12px 10px; }
+.mns-workspace-island-expanded-heading { display: flex; justify-content: space-between; gap: 12px; padding: 0 4px 3px; color: #94a3b8; font-size: 11px; font-weight: 600; }
+.mns-workspace-island-modes { display: grid; min-width: 0; flex: 1.35; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+.mns-workspace-island-activity-row { display: flex; min-width: 0; align-items: center; gap: 9px; border-radius: 14px; padding: 8px 10px; color: #526172; font-size: 12px; text-decoration: none; }
+.mns-workspace-island-activity-row:hover { background: rgba(241, 245, 249, .82); }
+.mns-workspace-island-activity-row-icon { display: grid; width: 30px; height: 30px; flex-shrink: 0; place-items: center; border-radius: 10px; background: rgba(226, 232, 240, .72); color: #64748b; }
+.mns-workspace-island-activity-row strong,
+.mns-workspace-island-activity-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mns-workspace-island-activity-row strong { color: #334155; font-size: 12px; font-weight: 600; }
+.mns-workspace-island-activity-row small { margin-top: 2px; color: #94a3b8; font-size: 10px; }
+.mns-workspace-island-activity-row-meta { display: flex; flex-shrink: 0; flex-direction: column; align-items: flex-end; gap: 2px; color: #64748b; font-size: 11px; font-weight: 600; }
+.mns-workspace-island-activity-row-meta small { color: #94a3b8; font-size: 10px; font-weight: 500; }
+.mns-workspace-island-mark { display: inline-flex; width: 32px; height: 32px; align-items: center; justify-content: center; color: #111820; }
+.mns-workspace-island-item { display: flex; min-height: 50px; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 1px solid transparent; border-radius: 15px; padding: 0 6px; color: #607080; font-size: 11px; font-weight: 700; white-space: nowrap; transition: color .2s ease, background-color .2s ease, transform .2s ease; }
+.mns-workspace-island-item:hover { color: #111820; background: rgba(255,255,255,.68); transform: translateY(-1px); }
+.mns-workspace-island-item-active { color: #111820; background: rgba(255,255,255,.84); box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 4px 12px rgba(15,23,42,.08); }
+@media (max-width: 720px) {
+  .mns-workspace-island,
+  .mns-workspace-island-panel-open { left: 12px; width: calc(100% - 24px); transform: none; }
+  .mns-workspace-island-inner { flex-direction: column; }
+  .mns-workspace-island-activity { min-width: 0; min-height: 58px; border-left: 0; border-top: 1px solid rgba(148, 163, 184, .2); }
+  .mns-workspace-island-item { min-height: 48px; padding-inline: 3px; font-size: 11px; }
+  .mns-workspace-island-status { padding-inline: 7px; }
+}
+@keyframes mns-island-ring-flow { from { background-position: 0% 18%; } to { background-position: 320% 82%; } }
+@keyframes mns-island-ring-breathe { 0%, 100% { opacity: .32; } 50% { opacity: .68; } }
+@keyframes mns-island-activity-enter { from { opacity: 0; transform: translateX(12px) scale(.98); } to { opacity: 1; transform: translateX(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .mns-workspace-island-activity-enter { animation: none; }
+  .mns-workspace-island-ring { animation: none; }
+  .mns-workspace-island { transition: none; }
+}
+
+/* ---------- MNS 首页 ---------- */
+
+.mns-entry-bg {
+  --mns-parallax-x: 0px;
+  --mns-parallax-y: 0px;
+  background-color: #f5fbfd;
+  background-image:
+    radial-gradient(ellipse 86% 72% at 82% 3%, rgba(145, 235, 239, 0.38), transparent 64%),
+    radial-gradient(ellipse 70% 66% at 8% 96%, rgba(137, 233, 235, 0.32), transparent 62%),
+    radial-gradient(ellipse 72% 62% at 88% 92%, rgba(219, 207, 255, 0.28), transparent 64%),
+    linear-gradient(135deg, #f9fbff 0%, #f2fbfd 52%, #fbf8ff 100%);
+}
+
+.mns-ambient-fields {
+  pointer-events: none;
+}
+
+.mns-ambient-field {
+  position: absolute;
+  display: block;
+  filter: blur(10px);
+  opacity: 0.76;
+  will-change: transform;
+  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mns-ambient-field-cyan {
+  left: -18%;
+  top: -22%;
+  width: 70%;
+  height: 82%;
+  background: radial-gradient(ellipse, rgba(61, 220, 226, 0.38), rgba(125, 234, 239, 0.12) 46%, transparent 72%);
+  animation: mns-ambient-cyan 16s ease-in-out infinite alternate;
+}
+
+.mns-ambient-field-sky {
+  right: -17%;
+  top: -20%;
+  width: 68%;
+  height: 78%;
+  background: radial-gradient(ellipse, rgba(98, 198, 244, 0.32), rgba(157, 222, 247, 0.1) 48%, transparent 72%);
+  animation: mns-ambient-sky 20s ease-in-out infinite alternate;
+}
+
+.mns-ambient-field-violet {
+  bottom: -36%;
+  left: 28%;
+  width: 68%;
+  height: 78%;
+  background: radial-gradient(ellipse, rgba(177, 139, 247, 0.25), rgba(210, 188, 255, 0.1) 50%, transparent 72%);
+  animation: mns-ambient-violet 12s ease-in-out infinite alternate;
+}
+
+.mns-home-logo {
+  border-radius: 8px;
+  animation: mns-logo-drop 760ms 100ms cubic-bezier(0.2, 0.9, 0.28, 1.24) both;
+}
+
+.mns-home-logo::after {
+  content: "";
+  position: absolute;
+  inset: 18% 1%;
+  z-index: 12;
+  background: linear-gradient(112deg, transparent 40%, rgba(255, 255, 255, 0.82) 50%, transparent 60%);
+  transform: translateX(-125%) skewX(-12deg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mns-home-logo:hover::after {
+  animation: mns-logo-shimmer 760ms ease-out;
+}
+
+.mns-home-logo img {
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1), filter 420ms ease;
+}
+
+.mns-home-logo:hover img {
+  transform: scale(1.012);
+  filter: drop-shadow(0 14px 24px rgba(32, 58, 69, 0.1));
+}
+
+.mns-logo-ripple {
+  position: absolute;
+  inset: 7% -2%;
+  z-index: 0;
+  border: 2px solid rgba(34, 211, 238, 0.72);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: mns-logo-ripple 680ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.mns-logo-shimmer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.mns-stagger-in {
+  animation: mns-stagger-rise 680ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.mns-stagger-title {
+  animation-delay: 200ms;
+}
+
+.mns-stagger-subtitle {
+  animation-delay: 380ms;
+}
+
+.mns-stagger-cta {
+  animation-delay: 520ms;
+}
+
+.mns-stagger-footer {
+  animation-delay: 700ms;
+}
+
+.mns-title-accent {
+  display: inline-block;
+  margin-inline: 0.08em;
+  transition: color 260ms ease, transform 340ms cubic-bezier(0.22, 1, 0.36, 1), text-shadow 260ms ease;
+}
+
+.mns-title-accent:hover {
+  color: #078aa0;
+  transform: translateY(-3px);
+  text-shadow: 0 10px 24px rgba(8, 145, 178, 0.16);
+}
+
+.mns-title-accent-video:hover {
+  color: #735bd4;
+}
+
+.mns-home-cta::before {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  z-index: -1;
+  border: 1px solid rgba(34, 211, 238, 0.38);
+  border-radius: inherit;
+  box-shadow: 0 0 22px rgba(34, 211, 238, 0.14);
+  animation: mns-cta-halo 2.8s ease-in-out infinite;
+}
+
+/* ---------- 登录界面 ---------- */
+
+.mns-auth-canvas {
+  background:
+    radial-gradient(ellipse 70% 50% at 8% 100%, rgba(110, 225, 230, 0.18), transparent 68%),
+    radial-gradient(ellipse 65% 48% at 95% 0%, rgba(169, 191, 255, 0.2), transparent 70%),
+    #f5f8fb;
+}
+
+.mns-entry-sheen {
+  background:
+    linear-gradient(116deg, rgba(255, 255, 255, 0.42), transparent 38%, rgba(255, 255, 255, 0.14) 68%, transparent),
+    radial-gradient(ellipse 44% 36% at 50% 44%, rgba(255, 255, 255, 0.62), transparent 72%);
+  pointer-events: none;
+}
+
+.mns-auth-ambient {
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 42% 30% at 50% 38%, rgba(255, 255, 255, 0.94), transparent 78%),
+    linear-gradient(112deg, transparent 20%, rgba(255, 255, 255, 0.42) 50%, transparent 80%);
+}
+
+.mns-auth-card {
+  animation: mns-auth-card-enter 680ms 80ms cubic-bezier(0.2, 0.85, 0.25, 1.1) both;
+}
+
+.mns-auth-card-accent {
+  background: linear-gradient(90deg, #16c8d8 0%, #45bdf2 52%, #775df2 100%);
+}
+
+.mns-auth-mode-tab {
+  letter-spacing: 0;
+}
+
+.mns-auth-field {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+@keyframes mns-ambient-cyan {
+  from {
+    transform: translate(var(--mns-parallax-x), var(--mns-parallax-y)) rotate(-5deg) scale(0.96);
+  }
+  to {
+    transform: translate(calc(var(--mns-parallax-x) + 5%), calc(var(--mns-parallax-y) + 4%)) rotate(8deg) scale(1.08);
+  }
+}
+
+@keyframes mns-ambient-sky {
+  from {
+    transform: translate(var(--mns-parallax-x), var(--mns-parallax-y)) rotate(7deg) scale(1.04);
+  }
+  to {
+    transform: translate(calc(var(--mns-parallax-x) - 6%), calc(var(--mns-parallax-y) + 5%)) rotate(-7deg) scale(0.94);
+  }
+}
+
+@keyframes mns-ambient-violet {
+  from {
+    transform: translate(var(--mns-parallax-x), var(--mns-parallax-y)) rotate(-4deg) scale(0.98);
+  }
+  to {
+    transform: translate(calc(var(--mns-parallax-x) + 4%), calc(var(--mns-parallax-y) - 5%)) rotate(6deg) scale(1.09);
+  }
+}
+
+@keyframes mns-logo-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.98);
+  }
+  72% {
+    opacity: 1;
+    transform: translateY(3px) scale(1.003);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mns-logo-shimmer {
+  0% {
+    opacity: 0;
+    transform: translateX(-125%) skewX(-12deg);
+  }
+  24% {
+    opacity: 0.78;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(125%) skewX(-12deg);
+  }
+}
+
+@keyframes mns-logo-ripple {
+  from {
+    opacity: 0.65;
+    transform: scale(0.82);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.34);
+  }
+}
+
+@keyframes mns-stagger-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mns-cta-halo {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.985);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.018);
+  }
+}
+
+@keyframes mns-auth-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.mns-page-enter {
+  animation: mns-page-enter 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes mns-page-enter {
+  from {
+    opacity: 0;
+    transform: scale(1.012);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.mns-page-leave {
+  pointer-events: none;
+  animation: mns-page-leave 420ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes mns-page-leave {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.988);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mns-page-enter,
+  .mns-page-leave,
+  .mns-ambient-field,
+  .mns-home-logo,
+  .mns-home-logo:hover::after,
+  .mns-logo-ripple,
+  .mns-stagger-in,
+  .mns-home-cta::before,
+  .mns-auth-card {
+    animation: none;
+  }
+
+  .mns-home-logo img,
+  .mns-title-accent,
+  .mns-home-cta,
+  .mns-home-cta svg {
+    transition: none;
+  }
+}
+
+/* ---------- 后台管理 ---------- */
+
+.admin-ambient {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(34, 211, 238, 0.18), transparent 27%),
+    radial-gradient(circle at 94% 4%, rgba(96, 165, 250, 0.16), transparent 30%),
+    linear-gradient(180deg, #f5fbff 0%, #edf5fb 48%, #f5f7fb 100%);
+}
+
+.admin-ambient-grid {
+  background-image: linear-gradient(rgba(15, 23, 42, 0.028) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 23, 42, 0.028) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(180deg, #000 0%, transparent 75%);
+}
+
+.admin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.55) transparent;
+}
+
+.admin-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.admin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 999px;
+}
+
+/* MNS 玻璃拟态后台外壳（浅色主题覆盖，功能结构不变） */
+.admin-console-page {
+  --admin-home-bg: #f5f9fd;
+  --admin-shell-bg: rgba(255, 255, 255, 0.78);
+  --admin-shell-border: rgba(255, 255, 255, 0.85);
+  --admin-panel-bg: rgba(255, 255, 255, 0.86);
+  --admin-control-bg: rgba(255, 255, 255, 0.8);
+  --admin-control-bg-hover: rgba(226, 244, 250, 0.85);
+  --admin-control-border: rgba(226, 232, 240, 0.9);
+  --admin-control-border-hover: rgba(34, 211, 238, 0.55);
+  --admin-control-text: #3f4b57;
+  --admin-control-text-hover: #0b1722;
+  --admin-control-muted: #8a9aa8;
+  --admin-icon-bg: transparent;
+  --admin-icon-color: #5b6c7a;
+  --admin-icon-ring: none;
+  --admin-progress-track: #e8f0f6;
+  --admin-progress-fill: #0f766e;
+  --admin-chart-1: #0e9bb5;
+  --admin-chart-2: #2f7fe0;
+  --admin-chart-3: #d97706;
+  --admin-chart-4: #7c3aed;
+  --admin-chart-5: #059669;
+  --admin-chart-6: #db2777;
+  --admin-chart-track: #e8f0f6;
+  --admin-chart-area: rgba(14, 165, 233, 0.1);
+  --admin-nav-item-bg: transparent;
+  --admin-nav-item-active-bg: #0b1722;
+  --admin-nav-item-border: transparent;
+  --admin-nav-item-active-border: transparent;
+  --admin-nav-item-active-shadow: 0 10px 22px rgba(11, 23, 34, 0.18);
+  --admin-nav-hover-bg: rgba(255, 255, 255, 0.7);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(34, 211, 238, 0.18), transparent 27%),
+    radial-gradient(circle at 94% 4%, rgba(96, 165, 250, 0.16), transparent 30%),
+    linear-gradient(180deg, #f5fbff 0%, #edf5fb 48%, #f5f7fb 100%) !important;
+}
+
+.admin-dashboard-shell::before {
+  display: block;
+  background-image: linear-gradient(rgba(15, 23, 42, 0.028) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 23, 42, 0.028) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(180deg, #000 0%, transparent 75%);
+}
+
+.admin-section-nav,
+.admin-dashboard-header {
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.admin-section-nav-item {
+  border-radius: 14px;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.admin-section-nav-item.is-active {
+  color: #ffffff !important;
+  border-radius: 14px;
+}
+
+.admin-section-nav-item.is-active .admin-section-nav-icon {
+  color: #67e8f9 !important;
+}
+
+.admin-section-nav-group-title {
+  letter-spacing: 0.04em;
+}
+
+.admin-panel-surface,
+.admin-metric-card,
+.admin-section-summary {
+  border-radius: 22px !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.07) !important;
+}
+
+.admin-dashboard-section-icon,
+.admin-section-title-icon {
+  border-radius: 12px !important;
+}

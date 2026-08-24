@@ -1,0 +1,530 @@
+---
+title: MNS 创作工作台迁移 PRD
+description: 将 MNS 的灵动岛、结果舞台与电商套图工作流迁移到 VOZEB PRO 的完整产品、技术与验收需求
+---
+
+# MNS 创作工作台迁移 PRD
+
+## 0. 文档目的与执行方式
+
+本文档是 VOZEB PRO 本地项目的迁移实施 PRD，目标读者是 DeepSeek Harness、开发工程师、测试工程师和产品验收人员。Harness 应以本文档为实施契约，直接修改本地 VOZEB PRO 仓库并完成测试，不把本文档当作只读设计稿。
+
+本文档的优先级如下：
+
+1. 用户当前确认的需求和本 PRD 的“必须”条款。
+2. 仓库 `AGENTS.md` 中的工程、安全、数据和测试约束。
+3. VOZEB PRO 当前代码、类型、数据库和服务端契约。
+4. `D:\deepseek\mns-project` 中的 MNS 界面与工作流参考。
+
+用户提供的截图（灵动岛顶部区域、结果展示区域）只用于表达视觉和交互意图，不是可复制的源码、品牌资源或接口说明。截图中圈出的区域需要转化为可访问、可响应、可测试的 VOZEB PRO 组件；不能逐像素复制 MNS 的品牌、文案、图标、字体、素材或专有 token。
+
+当前本地应用验收地址为 `http://127.0.0.1:3080/`。MNS 参考项目位于 `D:\deepseek\mns-project\app`。最终实现仍以 VOZEB PRO 的 Next.js、模型渠道、计费、媒体存储、生成任务和服务端会话为唯一业务基础。
+
+## 1. 背景与目标
+
+### 1.1 背景
+
+VOZEB PRO 已有统一创作输入框、Agent Run、图片/视频任务、媒体登记、PostgreSQL 与文件 Provider、计费和历史会话能力。MNS 已有独立工作台、动态岛式任务展示、图片/视频结果舞台和“竞品模仿/商品套图”工作流。本次工作是把 MNS 中有价值的界面层级和工作流迁移到 VOZEB PRO，而不是重写本地技术架构。
+
+仓库当前状态必须被正确理解：
+
+- `/agent`、`/image`、`/video` 已复用 `create/creative-workspace-page.tsx`，但电商页面与电商 API 还没有完整接通。
+- `CreativeComposer` 已预留 `skillLocked`、`toolbarExtra`、`submitDisabled`、`allowEmptySubmit` 等扩展能力，但调用方尚未完成电商接入。
+- 电商契约、Skill 和数据库表雏形已经存在。
+- 灵动岛当前只有静态四入口导航，没有活动聚合、跨页面进度和三态行为。
+- 短剧仍有页面、API、服务、数据库语义和测试残留，需要按本 PRD 删除。
+- 文件 Provider 的电商 Store 存在 `replaceData` 与 `writeData` 互相递归的阻塞缺陷，必须先修复。
+
+### 1.2 产品目标
+
+完成后，用户可以：
+
+- 在四个独立工作台中创作：造梦、图片生成、电商套图、视频生成。
+- 在每个工作台使用同一套 VOZEB PRO 搜索框、附件、参考素材、Skill、逻辑模型、智能规划、提示词优化、参数弹层和真实发送逻辑。
+- 在不离开当前页面的情况下看到跨工作台任务进度，并通过顶部灵动岛切换工作台或返回正在运行的会话/电商项目。
+- 上传一张白底商品图并选择方图、长图、详情图数量，创建一套可分组查看、局部编辑、单项再生成、失败重试、版本切换和 ZIP 导出的电商图片。
+- 刷新、离开页面或切换工作台后，仍从服务端恢复会话、任务和项目状态。
+- 不再看到短剧入口、短剧帮助、短剧筛选、短剧发布来源或短剧业务数据。
+
+### 1.3 非目标
+
+- 不迁移 MNS 的 SQLite、认证、文件目录 API、固定后台轮询、M 星计费实现或品牌资源。
+- 不新增浏览器业务持久化层；禁止把任务、会话、媒体、项目或大 JSON 写入 localStorage、IndexedDB、localforage 或 cookie。
+- 不新增独立音频顶部工作台；音频继续由造梦的智能规划和本地能力处理。
+- 不把 MNS 的“SKU 分类”等当前主流程未展示的字段加入首版电商输入。
+- 不改变 VOZEB PRO 的模型渠道协议、支付体系、媒体 Provider、任务 Worker 或 Next.js 架构。
+
+## 2. 入口、路由与会话隔离
+
+### 2.1 正式入口
+
+| 入口 | 页面名称 | 运行时 source | surface | 固定能力 |
+| --- | --- | --- | --- | --- |
+| `/agent` | 造梦 | `agent` | `chat` | 通用 Agent 规划，含图片、视频、音频能力 |
+| `/image` | 图片生成 | `image-workbench` | `chat` | 图片生成 |
+| `/ecommerce` | 电商套图 | `ecommerce-workbench` | `chat` | 图片生成 + 固定 `ecommerce-image` Skill |
+| `/video` | 视频生成 | `video-workbench` | `chat` | 视频/音频相关真实能力 |
+
+四个页面必须共享本地 `CreativeComposer` 的输入框和行为，但每个 source 的会话列表、历史恢复、结果聚合和工作台状态相互隔离。不能通过提示词文本、最后一条消息或“最新任务”猜测会话归属，必须使用稳定 `conversationId`、`runId`、`recordId` 和 `projectId`。
+
+### 2.2 兼容入口
+
+- `/create` 默认重定向到 `/agent`。
+- `/create?mode=image` 重定向到 `/image`。
+- `/create?mode=video` 重定向到 `/video`。
+- `/create?surface=commerce` 重定向到 `/ecommerce`。
+- 如果 query 同时出现多个旧参数，优先级为 `surface=commerce` > `mode=image` > `mode=video` > 默认 Agent。
+- `conversationId` 必须按目标 source 传递；目标页面加载失败或 scope 不匹配时，清除无效 query 并显示明确错误，不把会话静默恢复到其他工作台。
+- 旧入口兼容只负责导航，不复制旧工作台 UI，也不新建业务会话。
+
+### 2.3 导航
+
+顶部灵动岛提供四个工作台切换入口。侧栏可以保留“创作”主入口，但不得再显示短剧；图片、视频、电商是否作为侧栏独立项由当前壳层布局决定，若显示必须指向上述正式路由。所有旧 `/create` 链接应在用户可见导航中替换为 `/agent`，后台或历史数据中的旧 URL可由兼容层处理。
+
+## 3. 统一搜索框需求
+
+### 3.1 共用行为
+
+四个页面都使用 `web/src/app/(user)/create/components/creative-composer.tsx`，保留以下本地能力：
+
+- 文本需求输入、粘贴图片、附件上传、参考素材引用和 `@` 资产提及。
+- 发送、停止、忙碌、失败和重试状态。
+- Skill 选择、逻辑模型选择、多模型选择和智能规划开关。
+- 图片比例/尺寸、画质、数量等真实支持参数。
+- 视频比例、清晰度、时长、音频开关、水印和普通参考/首帧/首尾帧选择。
+- 音频音色、格式和速度参数；音频入口只在造梦的智能规划或通用参数中出现。
+- 后台默认文本模型驱动的“优化提示词”；优化结果回填可编辑草稿，不自动发送。
+- 空白页下方展开参数弹层，进入已有会话后按触发器实际空间向上展开；弹层高度必须依据 `visualViewport` 和触发器剩余空间计算。
+- 发送前附件只存在页面内存；发送时一次性上传、登记资产并创建会话/Run。移除、新建会话、切换用户、退出登录或转换为稳定资产时释放 `object URL`。
+
+### 3.2 按工作台限制真实能力
+
+- 造梦：允许通用 Agent 规划，模型/能力由规划器根据用户需求选择；音频能力不新增顶部工作台。
+- 图片生成：只显示图片模型和图片参数，不显示视频、音频分类或不支持的单项参数。
+- 视频生成：只显示视频与音频模型，以及视频真实支持的参数；首尾帧缺少角色时禁止提交，同一图片不得同时作为首帧和尾帧。
+- 电商套图：固定图片生成能力；进入页面即视为用户本轮显式选择 `ecommerce-image` Skill，Skill 入口可显示已锁定状态但不能被误删；不接受用户通过普通请求替换为其他 Skill。
+
+### 3.3 紧凑布局
+
+创作类型、模型和生成偏好只显示单行紧凑摘要；模型卡片和参数网格只在点击入口时展开。工具按钮只有对应弹层打开期间可使用激活配色，关闭后回到中性状态。窄屏允许工具条横向滚动，但发送按钮必须独立固定可见。电商数量控件不能常驻占用输入框高度。
+
+## 4. 电商套图产品需求
+
+### 4.1 用户流程
+
+1. 用户进入 `/ecommerce`。
+2. 页面自动锁定 `ecommerce-image` Skill，并显示电商生图提示；不自动上传或创建项目。
+3. 用户在本地搜索框上传白底商品图，可输入卖点、场景、风格、指定文案和其他要求。
+4. 用户点击搜索框操作栏或发送按钮旁的“生成数量”紧凑下拉入口。
+5. 用户分别设置方图、长图、详情图数量，关闭下拉后只显示摘要，例如“方 1 · 长 5 · 详情 10”。
+6. 合计合法后发送。附件在发送前只保留页面内存，提交时一次性上传并登记媒体、创建会话和项目。
+7. 页面展示商品分析、套图策划、分类槽位、生成进度和部分成功结果；用户可离开页面，任务继续运行。
+8. 用户可以按项目重试全部失败项、按单项创建新版本、对某一版本进行局部蒙版编辑、切换版本、预览、下载或导出全部成功版本 ZIP。
+
+### 4.2 数量规则
+
+结构化请求字段固定为：
+
+```json
+{
+  "counts": {
+    "square": 1,
+    "pageMain": 5,
+    "detail": 10
+  }
+}
+```
+
+- 默认值：`square=1`、`pageMain=5`、`detail=10`。
+- 每一类允许 `0–40`，必须是安全整数。
+- 三类合计必须为 `1–40`。
+- 合计非法时，发送按钮禁用，并显示明确中文校验信息；不能只依赖服务端报错。
+- 比例固定：方图 `1:1`；长图和详情图 `3:4`。
+- 首版不提供 SKU 分类、平台分类或其他 MNS 未在主流程展示的数量维度。
+- 前端数量下拉使用普通 `div` 外壳控制尺寸，Ant Design 组件不能破坏输入框操作栏布局；下拉在 390px、430px 可完整操作且无横向溢出。
+
+### 4.3 电商输入字段
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| 白底商品图 | 是 | 一个或多个图片按本地附件契约上传；至少有一个可作为商品主图 |
+| 原始需求/卖点 | 是 | 用户可见原文，进入会话消息和历史标题 |
+| 场景 | 否 | 可由原始需求表达，不单独强制拆字段 |
+| 风格 | 否 | 可由原始需求表达，不单独强制拆字段 |
+| 指定文案 | 否 | 作为公开需求的一部分；内部提示词不得直接展示 |
+| counts | 是 | 三类数量结构化字段 |
+
+服务端应在内部完成商品分析、套图策划、公开结果摘要和模型/参数选择，但分析过程、模型选择理由、执行提示词和内部 Skill 指令不能进入用户消息、公开历史或灵动岛文案。
+
+### 4.4 结果舞台
+
+电商结果使用 MNS 风格的信息层级，但媒体渲染必须复用 VOZEB PRO 的真实尺寸、限宽 WebP 预览、下载、失败和重试能力：
+
+- 按“方图 / 长图 / 详情图”分组，每组显示数量、比例、阶段和已完成/失败统计。
+- 生成中显示真实 pending/running 占位、阶段文案和进度，不使用自动宽度 flex 子项反推百分比高度。
+- 部分成功时立即展示成功项，失败项保留原槽位并显示原位重试入口。
+- 项目级“重试失败”必须一次请求原子更新并调度全部失败项，前端禁止逐项并发调用。
+- 单项“再次生成”必须增加该 `itemId` 的版本号并保留旧版本，不覆盖历史媒体。
+- 局部编辑使用现有图片编辑/蒙版能力，关联 `projectId + itemId + versionId`，编辑结果为新版本。
+- 只有真实存在两个以上可展示版本时才渲染版本切换器；只有一个版本时不得渲染空切换器。
+- 预览边框只包裹媒体本身，媒体、预览容器和可见卡片同宽同高，遵循后端宽高或自然尺寸，禁止 `object-fit: cover` 拉伸。
+- ZIP 只打包全部成功版本；存在失败项时明确提示“将跳过失败项”，不得伪造成功文件。
+
+## 5. 灵动岛与跨工作台活动
+
+### 5.1 三态
+
+将现有 `WorkspaceModeIsland` 升级为 `minimal`、`compact`、`expanded` 三态：
+
+- `minimal`：仅显示品牌标记或轻量活动提示，可点击恢复 `compact`。
+- `compact`：显示当前工作台、活动类型、阶段、进度和成功/失败数量；点击活动进入 `expanded` 或返回对应会话/项目。
+- `expanded`：显示四个工作台入口、当前活动列表、任务状态、进度、会话/项目跳转、收起/最小化操作。
+
+岛体宽度、最小高度、圆角和动画必须有稳定 CSS 变量和响应式上限，不能造成页面横向溢出。移动端也必须有可用的顶部活动展示，不得只在 `lg` 桌面显示。
+
+### 5.2 四入口
+
+灵动岛入口固定为：造梦、图片生成、电商套图、视频生成。点击入口只切换路由，不取消后台任务。活动若携带 `conversationId` 应返回该会话；电商活动若携带 `projectId` 应打开对应项目；不能把 Agent 子任务跳到图片或视频工作台。
+
+### 5.3 活动协议
+
+新增 `GET /api/workspace/activities/events` SSE。每个事件至少包含：
+
+```ts
+type WorkspaceActivity = {
+  activityId: string;
+  workspace: "agent" | "image" | "ecommerce" | "video";
+  status: "queued" | "planning" | "running" | "partial" | "completed" | "failed" | "paused";
+  stage?: string;
+  progress?: number;
+  completed?: number;
+  total?: number;
+  failed?: number;
+  conversationId?: string;
+  runId?: string;
+  recordId?: string;
+  projectId?: string;
+  error?: string;
+  updatedAt: number;
+};
+```
+
+活动聚合来源：
+
+- Agent Run：规划、子任务、SSE 事件和运行状态。
+- 图片任务：生成记录/任务状态、成功结果数量和失败数量。
+- 视频任务：视频/音频任务状态、阶段和结果。
+- 电商项目：分析、策划、生成、部分成功、失败和导出阶段。
+
+PostgreSQL 使用现有 `LISTEN/NOTIFY`/进程事件扩展；文件 Provider 使用进程内事件信号。禁止复制 MNS 的固定短间隔轮询作为主要机制。SSE 客户端必须支持断线重连、事件去重、用户权限校验和刷新后的服务端恢复。
+
+### 5.4 活动生命周期
+
+活动状态应由真实服务端数据派生：
+
+`queued -> planning -> running -> partial/completed/failed`，允许 `paused`。不能以客户端定时器或页面是否打开作为任务完成依据。阶段文案应保持公开、简洁，例如“正在分析商品”“正在生成长图 3/5”，不暴露内部提示词。
+
+## 6. 服务端与 API 需求
+
+### 6.1 通用响应、鉴权和错误
+
+所有新增电商和活动 API 返回：
+
+```json
+{ "code": 0, "data": {}, "msg": "" }
+```
+
+Route Handler 只负责解析 HTTP、鉴权、调用 service 和映射响应；业务规则、幂等、事务、版本、计费和媒体归属放在 `web/src/lib/server/`。所有查询按当前登录用户、实体 ID、状态、时间窗或分页定向执行，禁止把完整数据库或整张业务表读入 Node.js 后筛选。
+
+### 6.2 电商 API
+
+#### `GET /api/ecommerce/projects`
+
+按当前用户分页/限制返回项目摘要，支持状态筛选。摘要包含 `projectId`、`counts`、`status`、`completed`、`failed`、`total`、时间和关联会话 ID，不返回内部分析和执行提示词。
+
+#### `POST /api/ecommerce/projects`
+
+请求至少包含：
+
+```json
+{
+  "clientRequestId": "client-generated-id",
+  "prompt": "用户原始公开需求",
+  "counts": { "square": 1, "pageMain": 5, "detail": 10 },
+  "productAssetIds": ["asset-id"]
+}
+```
+
+处理顺序：鉴权与输入校验 → 校验商品资产归属/类型 → 以 `(userId, clientRequestId)` 幂等创建项目 → 创建/恢复 `ecommerce-workbench` 会话 → 创建项目槽位和初始版本 → 创建真实 Agent/图片任务编排 → 预扣/登记计费身份 → 返回项目摘要。重复请求不得重复建项目、上传媒体、扣费或调度上游。
+
+#### `GET /api/ecommerce/projects/[id]`
+
+按用户校验项目归属，返回项目、分类槽位、版本、媒体访问地址、阶段摘要、导出状态和失败原因。媒体 URL 必须是短期签名或站内授权地址，不能返回永久对象 Key。
+
+#### `POST /api/ecommerce/projects/[id]/retry`
+
+只重试该项目当前失败项；服务端一次性原子更新所有失败 item/version 并调度任务。请求可携带幂等键，但不能由前端逐项发起。返回更新后的项目状态。
+
+#### `POST /api/ecommerce/projects/[id]/items/[itemId]/regenerate`
+
+校验 item 属于项目，创建递增版本并按当前商品/公开需求生成一张新图；旧版本保留。版本递增必须在数据库 `(itemId, version)` 约束和事务中保证。
+
+#### `POST /api/ecommerce/projects/[id]/items/[itemId]/edit`
+
+请求包含 `sourceVersionId`、公开编辑指令、蒙版/参考媒体的稳定资产引用和客户端幂等身份。服务端校验源版本和媒体归属，创建新版本并调用本地图片编辑任务。蒙版 data URL 只能在受限大小内短暂处理，不能写入公开消息或浏览器持久化。
+
+#### `GET/POST /api/ecommerce/projects/[id]/export`
+
+GET 返回最近导出状态；POST 创建一次项目导出任务，只读取该项目全部成功版本，生成 ZIP 后登记 `ecommerce_project_exports`。重复请求应按项目和导出身份幂等，不重复生成或扣费。
+
+### 6.3 活动 SSE
+
+`GET /api/workspace/activities/events`：
+
+- 只返回当前用户有权访问的活动。
+- 支持 `Last-Event-ID`、重连后的最新快照和终态事件。
+- 首次连接先发送当前 `planning/running/paused` 快照，再发送增量事件。
+- 心跳不能替代真实活动事件；断线时前端应退回一次定向 GET/刷新恢复，而不是客户端猜进度。
+- 事件聚合必须避免把一个 Run 的多个子任务重复显示成多个主活动。
+
+## 7. 数据模型与持久化
+
+### 7.1 电商领域
+
+新增/保留以下领域类型：
+
+- `EcommerceProject`：项目、用户、幂等请求、原始需求、数量、状态、会话、Run、商品资产。
+- `EcommerceProjectItem`：分类、稳定 ordinal、比例、状态、当前版本。
+- `EcommerceProjectVersion`：item、递增版本、状态、媒体、来源 Run/Task、错误。
+- `EcommerceProjectExport`：项目导出状态、存储键、错误和时间。
+
+数据库约束：
+
+- `UNIQUE (user_id, client_request_id)`：项目创建和计费幂等。
+- `UNIQUE (project_id, category, ordinal)`：结果槽位稳定。
+- `UNIQUE (item_id, version)`：版本递增唯一。
+- 所有表有用户可追溯的项目关联；查询必须带用户或通过项目用户关联校验。
+- 新增/调整表结构同步 `docs/content/docs/backend/backend-database.mdx`；如仓库存在生成版 `docs/backend-database.md`，也同步更新，不写兼容旧表的临时逻辑。
+
+### 7.2 任务关联策略
+
+电商图片继续使用本地 `GenerationTaskType = "image"`，不新增 `ecommerce` 上游任务类型。每个图片子任务通过 `projectId`、`runId`、`parentTaskId`、`generationSlotId`、`attemptNo` 和 payload 中的 category/item/version 关联到电商领域。只有在现有任务系统确实无法表达关联时，才提出新增 task type；若新增，必须同步类型、schema CHECK、store、scheduler、recovery、worker、webhook、后台统计、成本统计和测试，不能只加一个联合类型。
+
+### 7.3 文件 Provider
+
+文件 Provider 必须和 PostgreSQL 等价：幂等、用户隔离、版本唯一、事务式/锁式多文件写入、失败回滚和查询结果结构一致。立即修复 `ecommerce-project-store.ts` 中 `replaceData -> writeData -> replaceData` 的无限递归，改为单向调用 `writeJsonDataFile` 或项目现有等价写入函数；禁止以递归重试掩盖文件写入失败。
+
+### 7.4 会话与公开消息
+
+电商仍使用 `surface="chat"`、`source="ecommerce-workbench"`，不新增不必要 surface。用户原始需求是公开用户消息；分析、模型理由、执行提示词、Skill 规则和内部简报只能存任务 payload/内部日志，并且按现有敏感内容规则保护。图片/视频工作台和电商工作台的公开消息必须有服务端显式公开标记，前端不得仅凭 `role="user"` 展示。
+
+## 8. 生成、计费、媒体与失败处理
+
+### 8.1 生成流程
+
+电商首版服务端流程：
+
+1. 校验用户、商品资产、原始需求、数量和能力。
+2. 商品分析（内部）。
+3. 套图策划（内部，按三类数量创建稳定槽位）。
+4. 为每个槽位或可控批次调用现有图片模型渠道。
+5. 结果成功后登记全部媒体和资产关联；单项失败不隐藏同批成功项。
+6. 对账 Agent Run/图片任务与项目版本，汇总阶段、进度、成功数和失败数。
+
+图片任务必须继续使用本地模型选择、计费预扣、失败退款、生成日志、媒体登记和真实上游响应。不得在前端直接请求上游，不得伪造模型或成功媒体。
+
+### 8.2 幂等与计费
+
+客户端请求 ID 不是最终计费流水身份。服务端计费键必须绑定用户、业务请求、逻辑模型、渠道、上游模型、调用类型和请求指纹。重复同一业务身份不得重复扣费；同一业务身份但正文/参数不同必须返回冲突，而不是静默复用旧项目。失败退款按实际消费流水和 `pointsCost` 是否存在判断，0 积分调用也要正确记录和撤销用量。
+
+### 8.3 媒体归属与删除
+
+商品图在发送前不上传。发送时创建稳定资产并登记用户、原文件名、来源、conversation/run/task/project/item/version 关联。删除、重试、编辑和导出必须先做引用校验；不得删除仍被素材库、会话、其他版本、任务或作品引用的媒体。内容图片展示使用限宽 WebP 变体，明确下载时才返回原文件格式。
+
+### 8.4 状态与重试
+
+- 创建/规划失败：沿用原项目和原会话的稳定身份重试，不追加同名公开消息。
+- 多个生成子项失败：项目级一次请求原子重试全部失败项。
+- 单项再次生成：创建新版本和新上游尝试，不覆盖旧版本。
+- 上游创建请求已经发出但本地查询异常时，不自动再次创建上游任务；保留原 upstream ID 并由 Worker/页面继续查询。
+- 仅供应商明确终态失败或用户显式点击重试时才允许新的上游请求。
+- 生成状态不能因页面关闭、进程心跳中断或更新时间过旧被直接改成失败。
+
+## 9. 短剧删除需求
+
+本项目明确删除短剧功能，不提供旧入口、恢复入口或兼容显示。删除范围包括：
+
+- 用户页面：`web/src/app/(user)/drama/**`、短剧项目卡片、详情编辑器、分镜、资产、Agent、渲染和导出。
+- API：`web/src/app/api/drama/**`，包括项目、分析、审核、渲染、版本、成本、Agent 会话和剪映导出。
+- Service/Store/类型/测试：`web/src/lib/drama-*`、`web/src/lib/server/drama-*`、`web/src/services/api/drama-projects.ts`、短剧 store 和所有仅被短剧引用的测试。
+- 契约与上下文：移除 `drama` surface/source/handoff、Episode/Shot 专属字段、`drama-render` 任务语义和短剧 Skill workspace。
+- 媒体、生成日志、作品发布、后台筛选、统计、帮助内容、用户导出、备份和审计中的短剧来源。
+- 数据库：先按用户和项目收集引用，检查媒体、会话、消息、资产、生成记录、发布记录和派生记录；依赖记录清理后删除 `drama_project_versions`、`drama_projects` 及仅为短剧存在的关联表/约束。保留财务流水和必要审计记录。
+
+删除前必须执行统一引用检查；不能直接删媒体文件导致静默失效。删除后的生成日志、作品发布和用户导出不得再出现 `drama` 来源。同步更新数据库文档。
+
+## 10. 技术实施边界
+
+### 10.1 必须沿用
+
+- Next.js App Router、React、TypeScript、Ant Design、Tailwind、Zustand。
+- `web/src/app/api/` Route Handler、`web/src/lib/server/` service/repository、`web/src/services/api/` 客户端 API。
+- 现有 Agent Run、图片/视频任务、Worker、模型目录、计费、媒体 Provider、PostgreSQL/file Provider、SSE 事件桥。
+- 现有 `CreativeComposer`、`CreativeMessages`、`creative-media-result`、结果切换/预览/失败重试能力。
+
+### 10.2 不得引入
+
+- MNS SQLite schema、MNS 认证或用户系统。
+- MNS 的固定 2.5 秒/8 秒轮询作为主要任务机制。
+- 浏览器业务 localStorage/IndexedDB/localforage。
+- 新的大型状态管理框架、重复的转发组件或只为视觉展示的假任务/假媒体。
+- 根据 V2 任务路径猜测供应商 `/v1/models` 或未经验证的模型目录。
+
+### 10.3 建议目录落点
+
+- 页面：`web/src/app/(user)/ecommerce/page.tsx` 与必要的同目录私有组件。
+- 电商 Route Handler：`web/src/app/api/ecommerce/**`。
+- 电商 service/store/contract：复用 `web/src/lib/ecommerce-contract.ts`、`web/src/lib/server/ecommerce-project-store.ts`，新增 service/helper 放 `web/src/lib/server/`。
+- API 客户端：`web/src/services/api/ecommerce-projects.ts` 或当前项目同类命名。
+- 活动契约/聚合：`web/src/lib/workspace-activity-contract.ts`、`web/src/lib/server/workspace-activity-service.ts`（名称可按现有结构调整，但不得把活动逻辑塞进旧 overview 类型）。
+- 灵动岛：扩展 `web/src/components/layout/workspace-mode-island.tsx` 或现有工作区壳层组件；样式集中在现有 MNS 品牌 CSS/组件作用域。
+
+## 11. 前端验收标准
+
+### 11.1 桌面
+
+在 1672px、1440px、1366px 下：
+
+- 顶部灵动岛不遮挡标题、输入框、侧栏和结果；三态动画不引起布局跳动。
+- 四入口可正常切换；活动点击可返回正确会话/项目。
+- 图片、视频、电商结果按真实媒体比例渲染，操作栏和缩略图不重叠。
+- 电商数量下拉不改变搜索框整体尺寸；下拉打开/关闭后摘要正确。
+- 历史会话和刷新恢复所有当前 conversation 的生成轮次，而不是只恢复最新一轮。
+
+### 11.2 移动端
+
+在 390px、430px 下：
+
+- 无横向溢出；输入框发送按钮始终可见。
+- 数量下拉、Skill、模型和参数弹层在视口内可滚动、可点击，不使用 `force` 点击掩盖错误。
+- 灵动岛 compact/expanded 内容不截断；任务阶段、数量和错误可读。
+- 结果网格、预览、局部编辑、版本切换和下载按钮不超出屏幕。
+
+### 11.3 主题和可访问性
+
+浅色、深色主题都必须有可读的文字、边框、hover、focus、disabled 状态。过程状态使用语义浅底和细边框，不使用纯黑/深灰实心标签。图标按钮使用 lucide/现有图标并提供 `aria-label` 和 tooltip；页面文案为中文。
+
+## 12. 自动化测试计划
+
+### 12.1 路由与会话
+
+- 四个正式入口渲染正确标题、source 和固定能力。
+- `/create` 默认、`mode=image`、`mode=video`、`surface=commerce` 重定向正确。
+- 四个工作台历史、会话和结果互相隔离；错误 conversation 不跨工作台恢复。
+
+### 12.2 搜索框与数量
+
+- 四页使用同一 `CreativeComposer` 视觉和交互组件。
+- 电商页面进入即锁定 `ecommerce-image` Skill。
+- 数量默认值、0–40、合计 1–40、摘要、禁用发送和错误文案。
+- 请求字段准确映射为 `counts.square/pageMain/detail`。
+- 附件发送前不上传，发送时只上传/登记一次；重复请求不重复计费。
+
+### 12.3 电商服务端
+
+- PostgreSQL/file Provider 创建幂等、用户隔离、槽位唯一和版本唯一。
+- 商品分析/策划/生成阶段推进，部分成功和全失败状态。
+- 项目级一次性失败重试，单项版本递增，局部编辑新版本，媒体归属和引用检查。
+- 全部成功版本 ZIP 导出；失败项不进入 ZIP；重复导出不重复创建。
+- 文件 Provider 不再触发递归，读写 round-trip 与 PostgreSQL 结构等价。
+
+### 12.4 活动与灵动岛
+
+- minimal/compact/expanded 状态切换和键盘/触控行为。
+- 跨路由运行任务仍显示正确 workspace、stage、progress、completed、failed。
+- 刷新恢复、SSE 首次快照、增量事件、断线重连、事件去重和活动跳转。
+- Agent、图片、视频、电商活动不会互相覆盖或重复计数。
+
+### 12.5 短剧删除
+
+- 用户导航、帮助、API、服务、类型、测试、后台筛选、生成日志、作品发布和导出不再出现短剧入口/来源。
+- 数据库依赖清理顺序、媒体引用检查和保留财务/审计记录有测试或可审计脚本。
+
+### 12.6 必须执行的质量门禁
+
+在实现完成后执行：
+
+```bash
+cd web
+pnpm test
+pnpm run typecheck
+pnpm run lint
+pnpm run format:check
+pnpm run build
+pnpm run check:release
+pnpm run e2e
+```
+
+共享 PostgreSQL 且会建表/清理/加锁的 Vitest 集成文件使用 `--no-file-parallelism`。Playwright 必须使用独立且确认空闲的端口，不得静默复用未知服务；覆盖 1672、1440、1366、390、430，浅深主题、滚动边界、下拉可操作性、按钮对比度、Strict Mode 视频播放器和无横向溢出。
+
+发布验收前对所有新增/修改文本文件严格按 UTF-8 解码，扫描 `�`、`锟斤拷` 和其他乱码标记。不能把终端显示异常当作文件损坏，也不能在发现乱码时继续发布。
+
+## 13. 实施顺序与交付物
+
+### P0：打通可运行主链路
+
+1. 修复电商 Store 文件 Provider 递归并补最小读写测试。
+2. 完成电商 service、四类 API、`/ecommerce` 页面和 API 客户端。
+3. 扩展 `useCreateAgent`/conversation source/公开消息/历史恢复，使 `ecommerce-workbench` 可隔离运行。
+4. 接入本地图片任务、模型、计费、媒体登记和项目对账。
+5. 更新现有漂移测试（例如旧的 workbench redirect 和 mode island 断言）。
+
+### P1：结果体验和活动屏
+
+1. 接通紧凑数量下拉和三类结果舞台。
+2. 完成部分成功、项目级重试、单项版本、局部编辑、预览、下载和 ZIP 导出。
+3. 新增活动契约、聚合 service、SSE 和灵动岛三态。
+4. 完成跨路由/刷新恢复和移动端回归。
+
+### P2：短剧删除与全域清理
+
+1. 执行短剧数据引用检查和依赖清理。
+2. 删除页面、API、service、store、类型、测试和 schema 语义。
+3. 清理媒体、生成日志、作品发布、后台、帮助、统计、备份和用户导出。
+4. 更新数据库文档、功能文档、todo、pending-test 和变更记录。
+
+### 交付物
+
+- 可访问的 `/agent`、`/image`、`/ecommerce`、`/video`。
+- 兼容 `/create` 重定向。
+- 电商 API、服务、数据库/文件 Provider 等价实现和测试。
+- 灵动岛三态、活动 SSE、跨工作台恢复。
+- 短剧完整删除和引用清理证明。
+- 测试报告、浏览器回归截图/结果、UTF-8 乱码扫描结果和文档更新。
+
+## 14. Harness 执行注意事项
+
+- 开始前读取 `AGENTS.md`、本 PRD、VOZEB PRO 当前实现和 MNS 参考实现；不要只根据文件名猜测功能。
+- 先运行现有相关测试建立基线，再分阶段修改；每次代码改动后运行相关测试和类型检查。
+- 发现用户已有改动时保留并在其基础上修改，不执行破坏性回滚。
+- 处理删除短剧时先做全仓引用图和数据库引用检查，再删除；禁止先物理删媒体或表。
+- 不要把 MNS 的固定轮询、SQLite、认证、文件接口和品牌资源复制到 VOZEB PRO。
+- 不要用假进度、固定延时、无限重试、前端轮询或静态占位掩盖未完成的后端状态。
+- 所有业务不变量在 service/helper 校验，唯一性、事务、用户隔离和并发在持久层保证。
+- 任何新增的模型、渠道、目录、任务类型或数据库约束都必须有现有代码/供应商公开契约和测试依据；没有依据时保持本地已有能力。
+- 只把用户原文和公开结果写入可见消息；内部规划、执行提示词、模型理由、成本细节和 Skill 指令不可进入公开历史。
+- 最终报告必须列出已实现、未实现、测试命令、测试结果和明确遗留风险，不能把“页面可见”当成“任务链路完成”。
+
+## 15. 验收签字条件
+
+只有同时满足以下条件，迁移才可标记完成：
+
+- 四个入口和兼容重定向均可用，且 source/history 隔离。
+- 四个页面均使用本地搜索框；电商数量下拉、校验、发送和幂等完整。
+- 电商项目从上传到分析、策划、生成、部分成功、失败重试、版本、局部编辑和 ZIP 导出可通过真实后端链路完成。
+- 灵动岛能在所有工作台显示真实活动并跨路由、刷新恢复；SSE 可重连。
+- 图片、视频、电商结果使用真实尺寸、真实媒体、下载和失败操作，不存在假结果或布局溢出。
+- 短剧页面、API、服务、数据来源和用户可见入口全部移除，引用媒体安全保留。
+- `pnpm test`、`typecheck`、`lint`、`format:check`、`build`、`check:release` 和必要 E2E 全部通过，或在交付报告中明确记录无法完成的具体原因。
+- 文档、数据库说明、todo/pending-test/CHANGELOG 与实际代码状态一致，UTF-8 扫描无乱码。
+
